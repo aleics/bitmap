@@ -1,4 +1,4 @@
-use std::ops::{BitAnd, BitOr, Not};
+use std::ops::{BitAnd, BitOr, BitXor, Not};
 
 /// Bitmap stores a bitmap in chunks of 64 bits
 #[derive(Debug, PartialEq, Eq)]
@@ -106,6 +106,21 @@ impl BitOr for &Bitmap {
     }
 }
 
+impl BitXor for &Bitmap {
+    type Output = Bitmap;
+
+    fn bitxor(self, rhs: Self) -> Self::Output {
+        let size = self.size.min(rhs.size);
+        let mut chunks = Bitmap::chunks_with_size(size);
+
+        for (id, chunk) in chunks.iter_mut().enumerate() {
+            *chunk = self.chunks[id] ^ rhs.chunks[id];
+        }
+
+        Bitmap { chunks, size }
+    }
+}
+
 impl Not for &Bitmap {
     type Output = Bitmap;
 
@@ -195,5 +210,13 @@ mod tests {
                 chunks: vec![!21]
             }
         );
+    }
+
+    #[test]
+    fn test_xor() {
+        let first = Bitmap::from("00011");
+        let second = Bitmap::from("00010");
+
+        assert_eq!(&first ^ &second, Bitmap::from("00001"));
     }
 }
