@@ -167,13 +167,32 @@ impl SparseBitmap {
         }
     }
 
+    /// Get the bit value from a given position
+    pub fn get(&self, position: usize) -> bool {
+        if position > self.size {
+            return false;
+        }
+
+        for run in &self.runs {
+            if run.start <= position && run.end() > position {
+                return true;
+            }
+        }
+        false
+    }
+
     /// Set a bit value in a given position
     pub fn set(&mut self, position: usize, value: bool) {
         if position >= self.size {
             panic!("Index out of bounds");
         }
 
-        if let Some(index) = self.runs.iter().position(|run| run.is_between(position)) {
+        // Check if the position collides with existing runs
+        if let Some(index) = self
+            .runs
+            .iter()
+            .position(|run| run.start <= position && run.end() >= position)
+        {
             match value {
                 true => self.set_one(position, index),
                 false => self.set_zero(position, index),
@@ -294,10 +313,6 @@ impl Run {
     fn end(&self) -> usize {
         self.start + self.length
     }
-
-    fn is_between(&self, index: usize) -> bool {
-        self.start <= index && self.end() >= index
-    }
 }
 
 /// Calculate the amount of chunks needed for the desired bitmap size, and the bits per chunk.
@@ -328,9 +343,15 @@ mod tests {
 
     #[test]
     fn test_bitmap_get() {
-        let bitmap = Bitmap::from("10101");
-        assert!(bitmap.get(2));
+        let bitmap = Bitmap::from("11001");
+
+        assert_eq!(bitmap.get(0), true);
         assert_eq!(bitmap.get(1), false);
+        assert_eq!(bitmap.get(2), false);
+        assert_eq!(bitmap.get(3), true);
+        assert_eq!(bitmap.get(4), true);
+        assert_eq!(bitmap.get(5), false);
+        assert_eq!(bitmap.get(6), false);
     }
 
     #[test]
@@ -432,5 +453,18 @@ mod tests {
 
         assert_eq!(bitmap.runs, vec![]);
         assert_eq!(bitmap, SparseBitmap::from("00000"));
+    }
+
+    #[test]
+    fn test_get_sparse() {
+        let bitmap = SparseBitmap::from("11001");
+
+        assert_eq!(bitmap.get(0), true);
+        assert_eq!(bitmap.get(1), false);
+        assert_eq!(bitmap.get(2), false);
+        assert_eq!(bitmap.get(3), true);
+        assert_eq!(bitmap.get(4), true);
+        assert_eq!(bitmap.get(5), false);
+        assert_eq!(bitmap.get(6), false);
     }
 }
