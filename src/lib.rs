@@ -21,9 +21,12 @@ impl Bitmap {
         let (chunk_index, bit_index_in_chunk) = bit_index(position, usize::BITS as usize);
         let chunk = self.chunks[chunk_index];
 
+        // position_bit is a 1 in the bit position of the desired index
         let position_bit = 1 << bit_index_in_chunk;
 
-        position_bit == (position_bit & chunk)
+        // Using AND with `position_bit` returns only the value at the desired position
+        // If it's equal to 0, it means bit at the `position` was 0. Otherwise, 1.
+        (chunk & position_bit) != 0
     }
 
     /// Set a bit value in a given position
@@ -155,10 +158,10 @@ fn chunks_count(size: usize, chunk_bit_size: usize) -> usize {
     (size + chunk_bit_size - 1) / chunk_bit_size
 }
 
-/// Calculate the bit index in the chunks by a give position, and chunk bit size.
-fn bit_index(bit_index: usize, chunk_bit_size: usize) -> (usize, usize) {
-    let chunk_index = bit_index / chunk_bit_size;
-    let bit_index_in_chunk = bit_index % chunk_bit_size;
+/// Calculate the bit index in the chunks by a given position, and chunk bit size.
+fn bit_index(position: usize, chunk_bit_size: usize) -> (usize, usize) {
+    let chunk_index = position / chunk_bit_size;
+    let bit_index_in_chunk = position % chunk_bit_size;
 
     (chunk_index, bit_index_in_chunk)
 }
@@ -181,6 +184,15 @@ mod tests {
         let bitmap = Bitmap::from("10101");
         assert!(bitmap.get(2));
         assert_eq!(bitmap.get(1), false);
+    }
+
+    #[test]
+    fn test_set() {
+        let mut bitmap = Bitmap::from("00111");
+        bitmap.set(4, 1);
+        assert_eq!(bitmap, Bitmap::from("10111"));
+        bitmap.set(4, 0);
+        assert_eq!(bitmap, Bitmap::from("00111"));
     }
 
     #[test]
