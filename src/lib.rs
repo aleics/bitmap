@@ -153,6 +153,156 @@ impl From<&str> for Bitmap {
     }
 }
 
+// SparseBitmap is a bitmap representation optimized for sparse bitmap distributions.
+#[derive(Debug, PartialEq, Eq)]
+pub struct SparseBitmap {
+    runs: Vec<Run>,
+    size: usize,
+}
+
+impl SparseBitmap {
+    /// Creates a new `SparseBitmap` with a fixed size
+    pub fn new(size: usize) -> SparseBitmap {
+        SparseBitmap {
+            runs: Vec::new(),
+            size,
+        }
+    }
+
+    /// Set a bit value in a given position
+    pub fn set(&mut self, position: usize, value: i8) {
+        if position >= self.size {
+            panic!("Index out of bounds");
+        }
+
+        if let Some(index) = self.runs.iter().position(|run| run.is_between(position)) {
+            match value {
+                1 => self.set_one(position, index),
+                0 => self.set_zero(position, index),
+                _ => panic!("unsupported binary value {value}"),
+            }
+        } else if value == 1 {
+            self.runs.push(Run::new(position, 1));
+        }
+    }
+
+    /// Set bit value to 1 for a given position in-between a run with the given index.
+    fn set_one(&mut self, position: usize, index: usize) {
+        let current = self.runs.get(index).unwrap();
+
+        if position == current.start {
+            // Find the new start by merging any conflicts
+            let start = if let Some(index) = self
+                .runs
+                .iter()
+                .position(|run| run.end() == current.start - 1)
+            {
+                self.runs.swap_remove(index).start
+            } else {
+                current.start - 1
+            };
+
+            let run = self.runs.get_mut(index).unwrap();
+            run.start = start
+        } else if position == current.end() {
+            // Find the new length by merging any conflicts
+            let length = if let Some(index) = self
+                .runs
+                .iter()
+                .position(|run| run.start == current.end() + 1)
+            {
+                self.runs.swap_remove(index).length + 1
+            } else {
+                1
+            };
+
+            let run = self.runs.get_mut(index).unwrap();
+            run.length += length;
+        }
+    }
+
+    /// Set bit value to 0 for a given position in-between a run with the given index.
+    fn set_zero(&mut self, position: usize, index: usize) {
+        let run = self.runs.get_mut(index).unwrap();
+
+        if position == run.start {
+            run.start += 1
+        } else if position == run.end() {
+            run.length -= 1
+        } else {
+            // If a 0 is set in-between a run, create a new run with the leftover
+            let start = position + 1;
+            let leftover = Run::new(start, run.end() - start);
+
+            run.length = position - run.start;
+            self.runs.push(leftover);
+        }
+    }
+}
+
+impl From<&str> for SparseBitmap {
+    fn from(value: &str) -> Self {
+        let mut bitmap = SparseBitmap::new(value.len());
+
+        let ones = value.chars().rev().enumerate().filter_map(|(index, char)| {
+            if char == '1' {
+                Some(index)
+            } else {
+                None
+            }
+        });
+
+        for index in ones {
+            bitmap.set(index, 1);
+        }
+
+        bitmap
+    }
+}
+
+impl ToString for SparseBitmap {
+    fn to_string(&self) -> String {
+        let mut result = (0..self.size).fold(String::with_capacity(self.size), |mut acc, _| {
+            acc.push('0');
+            acc
+        });
+
+        for run in &self.runs {
+            let ones = (0..run.length).fold(String::with_capacity(run.length), |mut acc, _| {
+                acc.push('1');
+                acc
+            });
+
+            let start = self.size - (run.start + run.length);
+            let end = self.size - run.start;
+            result.replace_range(start..end, &ones)
+        }
+
+        result
+    }
+}
+
+// Run represents a range in a `SparseBitmap`, where 1s are stored
+#[derive(Debug, PartialEq, Eq)]
+struct Run {
+    start: usize,
+    length: usize,
+}
+
+impl Run {
+    fn new(start: usize, length: usize) -> Run {
+        Run { start, length }
+    }
+
+    fn end(&self) -> usize {
+        self.start + self.length
+    }
+
+    fn is_between(&self, index: usize) -> bool {
+        self.start <= index && self.end() >= index
+    }
+}
+
 /// Calculate the amount of chunks needed for the desired bitmap size, and the bits per chunk.
 fn chunks_count(size: usize, chunk_bit_size: usize) -> usize {
     (size + chunk_bit_size - 1) / chunk_bit_size
@@ -171,7 +321,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_chunks_of_size() {
+    fn test_bitmap_chunks_of_size() {
         assert_eq!(0, chunks_count(0, 16));
         assert_eq!(1, chunks_count(1, 16));
         assert_eq!(1, chunks_count(15, 16));
@@ -180,14 +330,14 @@ mod tests {
     }
 
     #[test]
-    fn test_get() {
+    fn test_bitmap_get() {
         let bitmap = Bitmap::from("10101");
         assert!(bitmap.get(2));
         assert_eq!(bitmap.get(1), false);
     }
 
     #[test]
-    fn test_set() {
+    fn test_bitmap_set() {
         let mut bitmap = Bitmap::from("00111");
         bitmap.set(4, 1);
         assert_eq!(bitmap, Bitmap::from("10111"));
@@ -196,7 +346,7 @@ mod tests {
     }
 
     #[test]
-    fn test_or() {
+    fn test_bitmap_or() {
         let first = Bitmap::from("00001");
         let second = Bitmap::from("00010");
 
@@ -204,7 +354,7 @@ mod tests {
     }
 
     #[test]
-    fn test_and() {
+    fn test_bitmap_and() {
         let first = Bitmap::from("00011");
         let second = Bitmap::from("00010");
 
@@ -212,7 +362,7 @@ mod tests {
     }
 
     #[test]
-    fn test_not() {
+    fn test_bitmap_not() {
         let first = Bitmap::from("10101"); // 21
 
         assert_eq!(
@@ -225,10 +375,67 @@ mod tests {
     }
 
     #[test]
-    fn test_xor() {
+    fn test_bitmap_xor() {
         let first = Bitmap::from("00011");
         let second = Bitmap::from("00010");
 
         assert_eq!(&first ^ &second, Bitmap::from("00001"));
+    }
+
+    #[test]
+    fn test_set_sparse() {
+        let mut bitmap = SparseBitmap::new(5);
+
+        bitmap.set(0, 1);
+        bitmap.set(1, 1);
+        bitmap.set(2, 1);
+
+        assert_eq!(bitmap.runs, vec![Run::new(0, 3)]);
+        assert_eq!(bitmap, SparseBitmap::from("00111"));
+    }
+
+    #[test]
+    fn test_set_merges_runs_sparse() {
+        let mut bitmap = SparseBitmap::new(5);
+
+        bitmap.set(0, 1);
+        bitmap.set(2, 1);
+        bitmap.set(3, 1);
+        bitmap.set(1, 1);
+
+        assert_eq!(bitmap.runs, vec![Run::new(0, 4)]);
+        assert_eq!(bitmap, SparseBitmap::from("01111"));
+    }
+
+    #[test]
+    fn test_set_splits_runs_sparse() {
+        let mut bitmap = SparseBitmap::new(5);
+
+        bitmap.set(0, 1);
+        bitmap.set(1, 1);
+        bitmap.set(2, 1);
+        bitmap.set(3, 1);
+        bitmap.set(4, 1);
+        bitmap.set(1, 1);
+
+        bitmap.set(2, 0);
+
+        assert_eq!(bitmap.runs, vec![Run::new(0, 2), Run::new(3, 2)]);
+        assert_eq!(bitmap, SparseBitmap::from("11011"));
+    }
+
+    #[test]
+    fn test_set_add_zero_empty_runs_sparse() {
+        let mut bitmap = SparseBitmap::new(5);
+
+        bitmap.set(0, 0);
+        bitmap.set(1, 0);
+        bitmap.set(2, 0);
+        bitmap.set(3, 0);
+
+        bitmap.set(2, 0);
+
+        assert_eq!(bitmap.runs, vec![]);
+        assert_eq!(bitmap, SparseBitmap::from("00000"));
     }
 }
