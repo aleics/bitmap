@@ -313,6 +313,36 @@ impl Run {
     fn end(&self) -> usize {
         self.start + self.length
     }
+
+    fn intersect(&self, run: &Run) -> Option<Run> {
+        if self.matches(run) {
+            let start = self.start.max(run.start);
+            let end = self.end().min(run.end());
+
+            Some(Run::new(start, end - start))
+        } else {
+            None
+        }
+    }
+
+    fn union(&self, run: &Run) -> Option<Run> {
+        if self.matches(run) {
+            let start = self.start.min(run.start);
+            let end = self.end().max(run.end());
+
+            Some(Run::new(start, end - start))
+        } else {
+            None
+        }
+    }
+
+    fn matches(&self, run: &Run) -> bool {
+        self.contains(run.start) || run.contains(self.start)
+    }
+
+    fn contains(&self, index: usize) -> bool {
+        index >= self.start && index < self.end()
+    }
 }
 
 /// Calculate the amount of chunks needed for the desired bitmap size, and the bits per chunk.
@@ -466,5 +496,32 @@ mod tests {
         assert_eq!(bitmap.get(4), true);
         assert_eq!(bitmap.get(5), false);
         assert_eq!(bitmap.get(6), false);
+    }
+
+    #[test]
+    fn test_intersect_sparse_runs() {
+        assert_eq!(
+            Run::new(2, 4).intersect(&Run::new(1, 3)),
+            Some(Run::new(2, 2))
+        );
+        assert_eq!(
+            Run::new(3, 2).intersect(&Run::new(1, 4)),
+            Some(Run::new(3, 2))
+        );
+        assert_eq!(
+            Run::new(2, 2).intersect(&Run::new(3, 2)),
+            Some(Run::new(3, 1))
+        );
+        assert_eq!(Run::new(2, 1).intersect(&Run::new(3, 1)), None);
+        assert_eq!(Run::new(3, 1).intersect(&Run::new(2, 1)), None);
+    }
+
+    #[test]
+    fn test_union_sparse_runs() {
+        assert_eq!(Run::new(2, 4).union(&Run::new(1, 3)), Some(Run::new(1, 5)));
+        assert_eq!(Run::new(3, 2).union(&Run::new(1, 4)), Some(Run::new(1, 4)));
+        assert_eq!(Run::new(2, 2).union(&Run::new(3, 2)), Some(Run::new(2, 3)));
+        assert_eq!(Run::new(2, 1).union(&Run::new(3, 1)), None);
+        assert_eq!(Run::new(3, 1).union(&Run::new(2, 1)), None);
     }
 }
