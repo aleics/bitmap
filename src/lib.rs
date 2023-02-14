@@ -213,7 +213,7 @@ impl SparseBitmap {
                 .iter()
                 .position(|run| run.end() == current.start - 1)
             {
-                self.runs.swap_remove(index).start
+                self.runs.remove(index).start
             } else {
                 current.start - 1
             };
@@ -227,7 +227,7 @@ impl SparseBitmap {
                 .iter()
                 .position(|run| run.start == current.end() + 1)
             {
-                self.runs.swap_remove(index).length + 1
+                self.runs.remove(index).length + 1
             } else {
                 1
             };
