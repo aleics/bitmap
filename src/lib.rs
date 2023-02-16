@@ -338,6 +338,28 @@ impl BitOr for &SparseBitmap {
     }
 }
 
+impl Not for &SparseBitmap {
+    type Output = SparseBitmap;
+
+    fn not(self) -> Self::Output {
+        let mut start: usize = 0;
+        let mut runs = Vec::new();
+
+        for run in &self.runs {
+            if start < run.start {
+                runs.push(Run::new(start, run.start - start));
+            }
+
+            start = run.end();
+        }
+
+        SparseBitmap {
+            size: self.size,
+            runs,
+        }
+    }
+}
+
 impl From<&str> for SparseBitmap {
     fn from(value: &str) -> Self {
         let mut bitmap = SparseBitmap::new(value.len());
@@ -621,5 +643,13 @@ mod tests {
         let second = SparseBitmap::from("10010");
 
         assert_eq!(&first | &second, SparseBitmap::from("11011"));
+    }
+
+    #[test]
+    fn test_sparse_not() {
+        assert_eq!(!&SparseBitmap::from("10101"), SparseBitmap::from("01010"));
+        assert_eq!(!&SparseBitmap::from("11000"), SparseBitmap::from("00111"));
+        assert_eq!(!&SparseBitmap::from("11011"), SparseBitmap::from("00100"));
+        assert_eq!(!&SparseBitmap::from("11111"), SparseBitmap::from("00000"));
     }
 }
