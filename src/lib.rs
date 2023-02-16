@@ -254,6 +254,88 @@ impl SparseBitmap {
             self.runs.push(leftover);
         }
     }
+
+    fn append(&mut self, run: Run) {
+        if let Some((last, union)) = self
+            .runs
+            .last_mut()
+            .and_then(|last| last.union(&run).map(|union| (last, union)))
+        {
+            *last = union;
+        } else {
+            self.runs.push(run);
+        }
+    }
+}
+
+impl BitAnd for &SparseBitmap {
+    type Output = SparseBitmap;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        let size = self.size.min(rhs.size);
+        let mut runs = Vec::new();
+
+        let mut iter = self.runs.iter();
+        let mut rhs_iter = rhs.runs.iter();
+
+        let mut next = iter.next();
+        let mut rhs_next = rhs_iter.next();
+
+        while let (Some(run), Some(rhs_run)) = (next, rhs_next) {
+            if let Some(intersect) = run.intersect(rhs_run) {
+                runs.push(intersect);
+            }
+
+            // Iterate to the next run by increasing the pointer of the
+            // run with smallest end, so that we cover that a single long
+            // run has multiple intersections.
+            if run.end() < rhs_run.end() {
+                next = iter.next();
+            } else {
+                rhs_next = rhs_iter.next()
+            }
+        }
+
+        SparseBitmap { runs, size }
+    }
+}
+
+impl BitOr for &SparseBitmap {
+    type Output = SparseBitmap;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        let size = self.size.min(rhs.size);
+        let mut sparse = SparseBitmap::new(size);
+
+        let mut iter = self.runs.iter();
+        let mut rhs_iter = rhs.runs.iter();
+
+        let mut next = iter.next();
+        let mut rhs_next = rhs_iter.next();
+
+        // Iterate through both bitmaps and append all runs together
+        loop {
+            match (next, rhs_next) {
+                (Some(run), Some(rhs_run)) => {
+                    sparse.append(*run);
+                    sparse.append(*rhs_run);
+                    next = iter.next();
+                    rhs_next = rhs_iter.next();
+                }
+                (Some(run), None) => {
+                    sparse.append(*run);
+                    next = iter.next();
+                }
+                (None, Some(run)) => {
+                    sparse.append(*run);
+                    rhs_next = rhs_iter.next();
+                }
+                (None, None) => break,
+            }
+        }
+
+        sparse
+    }
 }
 
 impl From<&str> for SparseBitmap {
@@ -299,7 +381,7 @@ impl ToString for SparseBitmap {
 }
 
 // Run represents a range in a `SparseBitmap`, where 1s are stored
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Run {
     start: usize,
     length: usize,
@@ -341,7 +423,7 @@ impl Run {
     }
 
     fn contains(&self, index: usize) -> bool {
-        index >= self.start && index < self.end()
+        index >= self.start && index <= self.end()
     }
 }
 
@@ -512,8 +594,8 @@ mod tests {
             Run::new(2, 2).intersect(&Run::new(3, 2)),
             Some(Run::new(3, 1))
         );
-        assert_eq!(Run::new(2, 1).intersect(&Run::new(3, 1)), None);
-        assert_eq!(Run::new(3, 1).intersect(&Run::new(2, 1)), None);
+        assert_eq!(Run::new(2, 1).intersect(&Run::new(4, 1)), None);
+        assert_eq!(Run::new(4, 1).intersect(&Run::new(2, 1)), None);
     }
 
     #[test]
@@ -521,7 +603,23 @@ mod tests {
         assert_eq!(Run::new(2, 4).union(&Run::new(1, 3)), Some(Run::new(1, 5)));
         assert_eq!(Run::new(3, 2).union(&Run::new(1, 4)), Some(Run::new(1, 4)));
         assert_eq!(Run::new(2, 2).union(&Run::new(3, 2)), Some(Run::new(2, 3)));
-        assert_eq!(Run::new(2, 1).union(&Run::new(3, 1)), None);
-        assert_eq!(Run::new(3, 1).union(&Run::new(2, 1)), None);
+        assert_eq!(Run::new(2, 1).union(&Run::new(4, 1)), None);
+        assert_eq!(Run::new(4, 1).union(&Run::new(2, 1)), None);
+    }
+
+    #[test]
+    fn test_sparse_and() {
+        let first = SparseBitmap::from("00011");
+        let second = SparseBitmap::from("01010");
+
+        assert_eq!(&first & &second, SparseBitmap::from("00010"));
+    }
+
+    #[test]
+    fn test_sparse_or() {
+        let first = SparseBitmap::from("01001");
+        let second = SparseBitmap::from("10010");
+
+        assert_eq!(&first | &second, SparseBitmap::from("11011"));
     }
 }
