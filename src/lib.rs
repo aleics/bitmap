@@ -209,7 +209,7 @@ impl SparseBitmap {
                 false => self.set_zero(position, index),
             }
         } else if value {
-            self.runs.push(Run::new(position, 1));
+            self.append(Run::new(position, 1));
         }
     }
 
@@ -220,7 +220,10 @@ impl SparseBitmap {
 
         if position == current.start {
             // Find the new start by merging any conflicts
-            let start = if let Some(index) = self
+
+            let start = if current.start == 0 {
+                current.start
+            } else if let Some(index) = self
                 .runs
                 .iter()
                 .position(|run| run.end() == current.start - 1)
@@ -261,10 +264,12 @@ impl SparseBitmap {
         } else {
             // If a 0 is set in-between a run, create a new run with the leftover
             let start = position + 1;
-            let leftover = Run::new(start, run.end() - start);
+            let end = run.end();
 
             run.length = position - run.start;
-            self.runs.push(leftover);
+            if start < end - 1 {
+                self.runs.push(Run::new(start, end - start));
+            }
         }
     }
 
@@ -689,8 +694,21 @@ mod tests {
         bitmap.set(1, true);
         bitmap.set(2, true);
 
-        assert_eq!(bitmap.runs, vec![Run::new(0, 3)]);
         assert_eq!(bitmap, SparseBitmap::from("00111"));
+
+        bitmap = SparseBitmap::from("11111");
+
+        bitmap.set(0, true);
+        bitmap.set(1, true);
+        bitmap.set(2, true);
+
+        assert_eq!(bitmap, SparseBitmap::from("11111"));
+
+        bitmap.set(0, false);
+        bitmap.set(2, false);
+        bitmap.set(4, false);
+
+        assert_eq!(bitmap, SparseBitmap::from("01010"));
     }
 
     #[test]
