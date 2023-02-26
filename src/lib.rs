@@ -17,6 +17,7 @@ impl Bitmap {
     }
 
     /// Get the bit value from a given position
+    #[inline(always)]
     pub fn get(&self, position: usize) -> bool {
         let (chunk_index, bit_index_in_chunk) = bit_index(position, usize::BITS as usize);
         let chunk = self.chunks[chunk_index];
@@ -30,6 +31,7 @@ impl Bitmap {
     }
 
     /// Set a bit value in a given position
+    #[inline(always)]
     pub fn set(&mut self, position: usize, value: bool) {
         if position >= self.size {
             panic!("Index out of bounds");
@@ -53,6 +55,7 @@ impl Bitmap {
     /// Example: Set 1 in position 1 for "00101"
     ///   * Left shift 1, 1 times: "10"
     ///   * OR: "00101" OR "00010" = "00111"
+    #[inline(always)]
     fn set_one(&mut self, chunk: usize, bit: usize) {
         self.chunks[chunk] |= 1 << bit
     }
@@ -68,6 +71,7 @@ impl Bitmap {
     ///   * Left shift 1, 2 times: "100"
     ///   * Bitwise NOT of previous: "011"
     ///   * AND: "00101" AND "00011" = "00001"
+    #[inline(always)]
     fn set_zero(&mut self, chunk: usize, bit: usize) {
         self.chunks[chunk] &= !(1 << bit)
     }
@@ -80,6 +84,7 @@ impl Bitmap {
 impl BitAnd for &Bitmap {
     type Output = Bitmap;
 
+    #[inline(always)]
     fn bitand(self, rhs: Self) -> Self::Output {
         let size = self.size.min(rhs.size);
         let mut chunks = Bitmap::chunks_with_size(size);
@@ -95,6 +100,7 @@ impl BitAnd for &Bitmap {
 impl BitOr for &Bitmap {
     type Output = Bitmap;
 
+    #[inline(always)]
     fn bitor(self, rhs: Self) -> Self::Output {
         let size = self.size.min(rhs.size);
         let mut chunks = Bitmap::chunks_with_size(size);
@@ -110,6 +116,7 @@ impl BitOr for &Bitmap {
 impl BitXor for &Bitmap {
     type Output = Bitmap;
 
+    #[inline(always)]
     fn bitxor(self, rhs: Self) -> Self::Output {
         let size = self.size.min(rhs.size);
         let mut chunks = Bitmap::chunks_with_size(size);
@@ -125,6 +132,7 @@ impl BitXor for &Bitmap {
 impl Not for &Bitmap {
     type Output = Bitmap;
 
+    #[inline(always)]
     fn not(self) -> Self::Output {
         let chunks = self.chunks.iter().map(|chunk| !chunk).collect();
 
@@ -168,6 +176,7 @@ impl SparseBitmap {
     }
 
     /// Get the bit value from a given position
+    #[inline(always)]
     pub fn get(&self, position: usize) -> bool {
         if position > self.size {
             return false;
@@ -178,10 +187,12 @@ impl SparseBitmap {
                 return true;
             }
         }
+
         false
     }
 
     /// Set a bit value in a given position
+    #[inline(always)]
     pub fn set(&mut self, position: usize, value: bool) {
         if position >= self.size {
             panic!("Index out of bounds");
@@ -203,6 +214,7 @@ impl SparseBitmap {
     }
 
     /// Set bit value to 1 for a given position in-between a run with the given index.
+    #[inline(always)]
     fn set_one(&mut self, position: usize, index: usize) {
         let current = self.runs.get(index).unwrap();
 
@@ -238,6 +250,7 @@ impl SparseBitmap {
     }
 
     /// Set bit value to 0 for a given position in-between a run with the given index.
+    #[inline(always)]
     fn set_zero(&mut self, position: usize, index: usize) {
         let run = self.runs.get_mut(index).unwrap();
 
@@ -255,6 +268,7 @@ impl SparseBitmap {
         }
     }
 
+    #[inline(always)]
     fn append(&mut self, run: Run) {
         if let Some((last, union)) = self
             .runs
@@ -271,6 +285,7 @@ impl SparseBitmap {
 impl BitAnd for &SparseBitmap {
     type Output = SparseBitmap;
 
+    #[inline(always)]
     fn bitand(self, rhs: Self) -> Self::Output {
         let size = self.size.min(rhs.size);
         let mut runs = Vec::new();
@@ -303,6 +318,7 @@ impl BitAnd for &SparseBitmap {
 impl BitOr for &SparseBitmap {
     type Output = SparseBitmap;
 
+    #[inline(always)]
     fn bitor(self, rhs: Self) -> Self::Output {
         let size = self.size.min(rhs.size);
         let mut sparse = SparseBitmap::new(size);
@@ -341,6 +357,7 @@ impl BitOr for &SparseBitmap {
 impl Not for &SparseBitmap {
     type Output = SparseBitmap;
 
+    #[inline(always)]
     fn not(self) -> Self::Output {
         let mut start: usize = 0;
         let mut runs = Vec::new();
@@ -363,6 +380,7 @@ impl Not for &SparseBitmap {
 impl BitXor for &SparseBitmap {
     type Output = SparseBitmap;
 
+    #[inline(always)]
     fn bitxor(self, rhs: Self) -> Self::Output {
         let size = self.size.min(rhs.size);
         let mut bitmap = SparseBitmap::new(size);
@@ -512,10 +530,12 @@ impl Run {
         Run { start, length }
     }
 
+    #[inline(always)]
     fn end(&self) -> usize {
         self.start + self.length
     }
 
+    #[inline(always)]
     fn intersect(&self, run: &Run) -> Option<Run> {
         if self.matches(run) {
             let start = self.start.max(run.start);
@@ -527,6 +547,7 @@ impl Run {
         }
     }
 
+    #[inline(always)]
     fn union(&self, run: &Run) -> Option<Run> {
         if self.matches(run) {
             let start = self.start.min(run.start);
@@ -538,21 +559,25 @@ impl Run {
         }
     }
 
+    #[inline(always)]
     fn matches(&self, run: &Run) -> bool {
         self.contains(run.start) || run.contains(self.start)
     }
 
+    #[inline(always)]
     fn contains(&self, index: usize) -> bool {
         index >= self.start && index <= self.end()
     }
 }
 
 /// Calculate the amount of chunks needed for the desired bitmap size, and the bits per chunk.
+#[inline(always)]
 fn chunks_count(size: usize, chunk_bit_size: usize) -> usize {
     (size + chunk_bit_size - 1) / chunk_bit_size
 }
 
 /// Calculate the bit index in the chunks by a given position, and chunk bit size.
+#[inline(always)]
 fn bit_index(position: usize, chunk_bit_size: usize) -> (usize, usize) {
     let chunk_index = position / chunk_bit_size;
     let bit_index_in_chunk = position % chunk_bit_size;
