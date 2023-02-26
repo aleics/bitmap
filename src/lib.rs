@@ -360,6 +360,104 @@ impl Not for &SparseBitmap {
     }
 }
 
+impl BitXor for &SparseBitmap {
+    type Output = SparseBitmap;
+
+    fn bitxor(self, rhs: Self) -> Self::Output {
+        let size = self.size.min(rhs.size);
+        let mut bitmap = SparseBitmap::new(size);
+
+        let mut iter = self.runs.iter();
+        let mut rhs_iter = rhs.runs.iter();
+
+        let mut next = iter.next();
+        let mut rhs_next = rhs_iter.next();
+
+        let mut previous_end = None;
+
+        loop {
+            match (next, rhs_next) {
+                // If both there are runs for both bitmaps
+                (Some(run), Some(rhs_run)) => {
+                    let start = run.start;
+                    let end = run.end();
+
+                    let rhs_start = rhs_run.start;
+                    let rhs_end = rhs_run.end();
+
+                    // New start is the minimum of both runs start or the previous run end point,
+                    // in case it exists and is between both run start points.
+                    let mut new_start = run.start.min(rhs_run.start);
+
+                    if let Some(previous_end) = previous_end {
+                        // If previous end point is between the both runs start points.
+                        if (previous_end > start && previous_end < rhs_start)
+                            || (previous_end > rhs_start && previous_end < start)
+                        {
+                            new_start = previous_end;
+                        }
+                    }
+
+                    // New end is the maximum start point or the minimum end of current runs.
+                    let new_end = start.max(rhs_start).min(end).min(rhs_end);
+
+                    let length = new_end - new_start;
+
+                    if length > 0 {
+                        bitmap.append(Run::new(new_start, new_end - new_start));
+                    }
+
+                    // Iterate to the next run by increasing the pointer of the
+                    // run with smallest end, so that we cover that a single long
+                    // run has multiple intersections.
+                    if end < rhs_end {
+                        next = iter.next();
+                        previous_end = Some(end);
+                    } else {
+                        rhs_next = rhs_iter.next();
+                        previous_end = Some(rhs_end);
+                    }
+                }
+                // If only left bitmap has runs left
+                (Some(run), None) => {
+                    let end = run.end();
+
+                    // If previous end exists and it's smaller than current end.
+                    if let Some(previous_end) = previous_end {
+                        if previous_end < end {
+                            bitmap.append(Run::new(previous_end, end - previous_end));
+                        }
+                    } else {
+                        bitmap.append(*run);
+                    }
+
+                    next = iter.next();
+                    previous_end = Some(end);
+                }
+                // If only right bitmap has runs left
+                (None, Some(rhs_run)) => {
+                    let rhs_end = rhs_run.end();
+
+                    // If previous end exists and it's smaller than current end.
+                    if let Some(previous_end) = previous_end {
+                        if previous_end < rhs_end {
+                            bitmap.append(Run::new(previous_end, rhs_end - previous_end));
+                        }
+                    } else {
+                        bitmap.append(*rhs_run);
+                    }
+
+                    rhs_next = rhs_iter.next();
+                    previous_end = Some(rhs_end);
+                }
+                (None, None) => break,
+            }
+        }
+
+        bitmap
+    }
+}
+
 impl From<&str> for SparseBitmap {
     fn from(value: &str) -> Self {
         let mut bitmap = SparseBitmap::new(value.len());
@@ -528,10 +626,34 @@ mod tests {
 
     #[test]
     fn test_bitmap_xor() {
-        let first = Bitmap::from("00011");
-        let second = Bitmap::from("00010");
-
-        assert_eq!(&first ^ &second, Bitmap::from("00001"));
+        assert_eq!(
+            &Bitmap::from("00011") ^ &Bitmap::from("00010"),
+            Bitmap::from("00001")
+        );
+        assert_eq!(
+            &Bitmap::from("11001") ^ &Bitmap::from("01100"),
+            Bitmap::from("10101")
+        );
+        assert_eq!(
+            &Bitmap::from("11111") ^ &Bitmap::from("01101"),
+            Bitmap::from("10010")
+        );
+        assert_eq!(
+            &Bitmap::from("11111") ^ &Bitmap::from("11111"),
+            Bitmap::from("00000")
+        );
+        assert_eq!(
+            &Bitmap::from("00110") ^ &Bitmap::from("00110"),
+            Bitmap::from("00000")
+        );
+        assert_eq!(
+            &Bitmap::from("10101") ^ &Bitmap::from("01010"),
+            Bitmap::from("11111")
+        );
+        assert_eq!(
+            &Bitmap::from("11111") ^ &Bitmap::from("00000"),
+            Bitmap::from("11111")
+        );
     }
 
     #[test]
@@ -651,5 +773,37 @@ mod tests {
         assert_eq!(!&SparseBitmap::from("11000"), SparseBitmap::from("00111"));
         assert_eq!(!&SparseBitmap::from("11011"), SparseBitmap::from("00100"));
         assert_eq!(!&SparseBitmap::from("11111"), SparseBitmap::from("00000"));
+    }
+
+    #[test]
+    fn test_sparse_xor() {
+        assert_eq!(
+            &SparseBitmap::from("00011") ^ &SparseBitmap::from("00010"),
+            SparseBitmap::from("00001")
+        );
+        assert_eq!(
+            &SparseBitmap::from("11001") ^ &SparseBitmap::from("01100"),
+            SparseBitmap::from("10101")
+        );
+        assert_eq!(
+            &SparseBitmap::from("11111") ^ &SparseBitmap::from("01101"),
+            SparseBitmap::from("10010")
+        );
+        assert_eq!(
+            &SparseBitmap::from("11111") ^ &SparseBitmap::from("11111"),
+            SparseBitmap::from("00000")
+        );
+        assert_eq!(
+            &SparseBitmap::from("00110") ^ &SparseBitmap::from("00110"),
+            SparseBitmap::from("00000")
+        );
+        assert_eq!(
+            &SparseBitmap::from("10101") ^ &SparseBitmap::from("01010"),
+            SparseBitmap::from("11111")
+        );
+        assert_eq!(
+            &SparseBitmap::from("11111") ^ &SparseBitmap::from("00000"),
+            SparseBitmap::from("11111")
+        );
     }
 }
