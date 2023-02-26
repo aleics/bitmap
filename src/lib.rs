@@ -4,7 +4,7 @@ use std::ops::{BitAnd, BitOr, BitXor, Not};
 #[derive(Debug, PartialEq, Eq)]
 pub struct Bitmap {
     chunks: Vec<usize>,
-    size: usize,
+    pub size: usize,
 }
 
 impl Bitmap {
@@ -163,7 +163,7 @@ impl From<&str> for Bitmap {
 #[derive(Debug, PartialEq, Eq)]
 pub struct SparseBitmap {
     runs: Vec<Run>,
-    size: usize,
+    pub size: usize,
 }
 
 impl SparseBitmap {
