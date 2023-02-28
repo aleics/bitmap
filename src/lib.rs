@@ -1,7 +1,7 @@
 use std::ops::{BitAnd, BitOr, BitXor, Not};
 
 /// Bitmap stores a bitmap in chunks of 64 bits
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Bitmap {
     chunks: Vec<usize>,
     pub size: usize,
@@ -160,7 +160,7 @@ impl From<&str> for Bitmap {
 }
 
 // SparseBitmap is a bitmap representation optimized for sparse bitmap distributions.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SparseBitmap {
     runs: Vec<Run>,
     pub size: usize,
@@ -427,7 +427,7 @@ impl BitXor for &SparseBitmap {
                     let length = new_end - new_start;
 
                     if length > 0 {
-                        bitmap.append(Run::new(new_start, new_end - new_start));
+                        bitmap.append(Run::new(new_start, length));
                     }
 
                     // Iterate to the next run by increasing the pointer of the
@@ -483,21 +483,29 @@ impl BitXor for &SparseBitmap {
 
 impl From<&str> for SparseBitmap {
     fn from(value: &str) -> Self {
-        let mut bitmap = SparseBitmap::new(value.len());
+        let size = value.len();
+        let mut runs = Vec::new();
 
-        let ones = value.chars().rev().enumerate().filter_map(|(index, char)| {
+        let mut start_run = None;
+
+        for (index, char) in value.chars().rev().enumerate() {
             if char == '1' {
-                Some(index)
-            } else {
-                None
+                if start_run.is_none() {
+                    start_run = Some(index);
+                }
+            } else if char == '0' {
+                if let Some(start) = start_run {
+                    runs.push(Run::new(start, index - start));
+                    start_run = None;
+                }
             }
-        });
-
-        for index in ones {
-            bitmap.set(index, true);
         }
 
-        bitmap
+        if let Some(start) = start_run {
+            runs.push(Run::new(start, size - start));
+        }
+
+        SparseBitmap { runs, size }
     }
 }
 
